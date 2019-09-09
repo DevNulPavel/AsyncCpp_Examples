@@ -3,5 +3,6 @@
 #include "SchedulersTest.h"
 
 int main(int argc, char *argv[]) {
-    schedulersTest();
+    taskSpawnTest();
+    //schedulersTest();
 }

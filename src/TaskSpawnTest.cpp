@@ -64,6 +64,26 @@ void taskSpawnTest() {
         }
     });
     
+    // Можно просто перезаписывать переменную последней задачи, удобно при создании цепочек
+    int64_t sharedVariable = 0;
+    auto previousTask = async::spawn([&sharedVariable](){
+        std::cout << "Task chain: " << sharedVariable++ << std::endl;
+    });
+    previousTask = previousTask.then([&sharedVariable](){
+        std::cout << "Task chain: " << sharedVariable++ << std::endl;
+    });
+    previousTask = previousTask.then([&sharedVariable](){
+        std::cout << "Task chain: " << sharedVariable++ << std::endl;
+    });
+    previousTask = previousTask.then([&sharedVariable](){
+        std::cout << "Task chain: " << sharedVariable++ << std::endl;
+    });
+    previousTask = previousTask.then([&sharedVariable](){
+        std::cout << "Task chain: " << sharedVariable++ << std::endl;
+    });
+    
+    previousTask.wait();
+    
     // Непосредственное получение результата из задачи 7 вместо продолжения
     //async::when_any_result<std::tuple<async::task<void>, async::task<void>>> results = task7.get();
        
