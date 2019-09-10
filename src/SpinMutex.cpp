@@ -1,4 +1,5 @@
 #include "SpinMutex.h"
+#include <cassert>
 
 SpinMutex::SpinMutex():
     _lock(false){
