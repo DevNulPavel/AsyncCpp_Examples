@@ -5,6 +5,6 @@
 
 int main(int argc, char *argv[]) {
     //taskSpawnTest();
-    //schedulersTest();
-    testContextsSwitch();
+    schedulersTest();
+    //testContextsSwitch();
 }

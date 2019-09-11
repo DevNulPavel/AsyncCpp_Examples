@@ -3,7 +3,8 @@
 #include <thread>
 #include <chrono>
 #include <async++.h>
-#include "CustomScheduler.h"
+#include "CustomSchedulerBalancer.h"
+#include "CustomSchedulerWaitQueue.h"
 
 
 static std::shared_ptr<async::threadpool_scheduler> networkContextScheduler;
@@ -12,7 +13,9 @@ static int32_t networkTestCounter = 0;
 static std::shared_ptr<async::threadpool_scheduler> fileContextScheduler;
 static int32_t fileTestCounter = 0;
 
-static std::vector<std::shared_ptr<CustomScheduler>> testContextCustomSchedulers;
+static std::shared_ptr<CustomSchedulerWaitQueue> customSchedulerWaitQueue;
+
+static std::vector<std::shared_ptr<CustomSchedulerBalancer>> testContextCustomSchedulers;
 
 static async::fifo_scheduler mainThreadScheduler;
 static bool mainThreadExit = false;
@@ -48,6 +51,19 @@ void fileThreadFunctionAfter(){
 
 ///////////////////////////////////////////////////////////////////////////
 
+void customSchedulerWaitQueueThreadFunction(){
+    // Проверяем, нету ли задач
+    while (customSchedulerWaitQueue->isStopRequested() == false) {
+        customSchedulerWaitQueue->waitAndPerformAllTasks();
+    }
+    
+    // Уничтожать должен именно данный поток
+    customSchedulerWaitQueue = nullptr;
+    std::cout << "Exit from thread customSchedulerWaitQueue" << std::endl;
+}
+
+///////////////////////////////////////////////////////////////////////////
+
 void schedulersTest() {
     srand(time(NULL));
     
@@ -59,15 +75,23 @@ void schedulersTest() {
     const uint32_t schedulersCount = 4;
     testContextCustomSchedulers.reserve(schedulersCount);
     for (size_t i = 0; i < schedulersCount; i++) {
-        testContextCustomSchedulers.push_back(std::make_shared<CustomScheduler>());
+        testContextCustomSchedulers.push_back(std::make_shared<CustomSchedulerBalancer>());
     }
     
+    // Создаем FIFI шедулер с ожиданием, владеть этим шедулером будет поток кастомного шедулера ниже
+    customSchedulerWaitQueue = std::make_shared<CustomSchedulerWaitQueue>();
+    
+    // Создаем поток для кастомного шедулера
+    std::thread customSchedulerThread(customSchedulerWaitQueueThreadFunction);
+    customSchedulerThread.detach();
+    
+    // Специальный ивент, для передачи результата
     async::event_task<int32_t> eventTask;
     
     // Создаем задачу на контексте сетевого шедулера
     auto task1_1 = async::spawn(*networkContextScheduler, [](){
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << "Task 1 executes asynchronously in network thread" << std::endl;
+        std::cout << "Task 1_1 executes asynchronously in network thread" << std::endl;
         
         networkTestCounter++;
     });
@@ -75,11 +99,16 @@ void schedulersTest() {
     // Создаем задачу из евента
     auto task1_2 = eventTask.get_task();
     
+    // Еще один кастомный шедулер
+    auto task1_3 = async::spawn(*customSchedulerWaitQueue, []{
+        std::cout << "Task 1_3 executes asynchronously in customSchedulerWaitQueue thread" << std::endl;
+    });
+    
     // Создаем задачу ожидания
-    auto task1_wait = async::when_all(task1_1, task1_2);
+    auto task1_wait = async::when_all(task1_1, task1_2, task1_3);
     
     // В качестве продолжения мы можем назначить несколкьо задач одной задаче, для этого нужно вызывать share
-    auto task1_shared = task1_wait.then([](std::tuple<async::task<void>, async::task<int>> results){
+    auto task1_shared = task1_wait.then([](std::tuple<async::task<void>, async::task<int>, async::task<void>> results){
     }).share();
     
     eventTask.set(1234);
@@ -104,7 +133,7 @@ void schedulersTest() {
     auto task2_wait = async::when_all(task2_1, task2_2);
     
     // Простая балансировка шедулеров, выбор наиболее свободного на данный момент шедулера
-    std::shared_ptr<CustomScheduler> bestSched = selectTheBestScheduler(testContextCustomSchedulers);
+    std::shared_ptr<CustomSchedulerBalancer> bestSched = selectTheBestScheduler(testContextCustomSchedulers);
     
     // Продолжаем работу в том самом лучшем шедулере
     auto task3 = task2_wait.then(*bestSched, [bestSched](){
@@ -153,6 +182,7 @@ void schedulersTest() {
     std::cout << "Schedulers delete" << std::endl;
     networkContextScheduler = nullptr;
     fileContextScheduler = nullptr;
+    customSchedulerWaitQueue->stopWaiting(); // Данным шедулером управляет сторонний поток, тут можно только попросить его остановиться
     testContextCustomSchedulers.clear();
     
     std::cout << "Main thread exit" << std::endl;

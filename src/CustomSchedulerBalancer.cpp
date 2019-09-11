@@ -1,4 +1,4 @@
-#include "CustomScheduler.h"
+#include "CustomSchedulerBalancer.h"
 
 #include <stdlib.h>
 #include <iostream>
@@ -6,7 +6,7 @@
 #include <chrono>
 #include <async++.h>
 
-CustomScheduler::CustomScheduler():
+CustomSchedulerBalancer::CustomSchedulerBalancer():
     _stopThread(false),
     _taskIsInWork(false),
     _threadExitSuccess(false){
@@ -48,7 +48,7 @@ CustomScheduler::CustomScheduler():
     workThread.detach();
 }
 
-CustomScheduler::~CustomScheduler(){
+CustomSchedulerBalancer::~CustomSchedulerBalancer(){
     _stopThread = true;
     _condVar.notify_all();
     
@@ -60,17 +60,17 @@ CustomScheduler::~CustomScheduler(){
     std::cout << "Custom scheduler destructor exit" << std::endl;
 }
 
-size_t CustomScheduler::getQueueSize(){
+size_t CustomSchedulerBalancer::getQueueSize(){
     std::unique_lock<std::mutex> lock(_mutex);
     return _queue.size();
 }
 
-bool CustomScheduler::taskIsInWork() const{
+bool CustomSchedulerBalancer::taskIsInWork() const{
     return _taskIsInWork;
 }
 
 // Для написания кастомного шедулера достаточно, чтобы класс реализовывал метод schedule
-void CustomScheduler::schedule(async::task_run_handle handle) {
+void CustomSchedulerBalancer::schedule(async::task_run_handle handle) {
     if (_stopThread == true) {
         return;
     }
@@ -83,14 +83,14 @@ void CustomScheduler::schedule(async::task_run_handle handle) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::shared_ptr<CustomScheduler> selectTheBestScheduler(const std::vector<std::shared_ptr<CustomScheduler>>& schedulers){
+std::shared_ptr<CustomSchedulerBalancer> selectTheBestScheduler(const std::vector<std::shared_ptr<CustomSchedulerBalancer>>& schedulers){
     if (schedulers.size() == 0) {
         return nullptr;
     }
     
     // Так как данные могут меняться, то заранее подготавливаем инфу для сортировки
     struct SortStruct{
-        std::shared_ptr<CustomScheduler> shed;
+        std::shared_ptr<CustomSchedulerBalancer> shed;
         size_t size;
         bool inWork;
     };
