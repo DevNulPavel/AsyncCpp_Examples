@@ -2,38 +2,68 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <queue>
+#include <initializer_list>
 #include <async++.h>
 #include "SpinMutex.h"
 
+class Context{
+public:
+    Context(){
+        _lastTask = async::make_task();
+    }
+    async::task<void>& getTask(){
+        return _lastTask;
+    }
+    
+    void perform(std::function<void()>&& function){
+        std::unique_lock<SpinMutexAdvanced> lock(_mutex);
+        _lastTask = _lastTask.then(function);
+    }
+    void perform(const std::function<void()>& function){
+        std::unique_lock<SpinMutexAdvanced> lock(_mutex);
+        _lastTask = _lastTask.then(function);
+    }
+    void perform(const std::function<void()>& function, const std::function<void()>& completeFunction){
+        std::unique_lock<SpinMutexAdvanced> lock(_mutex);
+        _lastTask = _lastTask.then(function).then(completeFunction);
+    }
+    
+private:
+    SpinMutexAdvanced _mutex;
+    async::task<void> _lastTask;
+};
 
-SpinMutexAdvanced mainThreadContextMutex;
-auto mainThreadContextLastTask = async::make_task();
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+Context mainThreadContext;
 bool mainThreadExit = false;
 int32_t mainContextValue = 0;
 
-SpinMutexAdvanced fileContextMutex;
-auto fileContextLastTask = async::make_task();
+Context fileThreadContext;
 int32_t fileContextValue = 0;
 
-SpinMutexAdvanced networkContextMutex;
-auto networkContextLastTask = async::make_task();
+Context networkThreadContext;
 int32_t networkContextValue = 0;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void performInMainContext(std::function<void()>&& function){
-    std::unique_lock<SpinMutexAdvanced> lock(mainThreadContextMutex);
-    mainThreadContextLastTask = mainThreadContextLastTask.then(function);
+    mainThreadContext.perform(std::move(function));
 }
 
 void performInFileContext(std::function<void()>&& function){
-    std::unique_lock<SpinMutexAdvanced> lock(fileContextMutex);
-    fileContextLastTask = fileContextLastTask.then(function);
+    fileThreadContext.perform(std::move(function));
 }
 
 void performInNetworkContext(std::function<void()>&& function){
-    std::unique_lock<SpinMutexAdvanced> lock(networkContextMutex);
-    networkContextLastTask = networkContextLastTask.then(function);
+    networkThreadContext.perform(std::move(function));
+}
+
+void runTasksOnContextsParallel(std::initializer_list<std::pair<Context&, std::function<void()>&>> tasksList){
+    for (auto& task: tasksList) {
+        task.first.perform(task.second);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,14 +118,14 @@ void testContextsSwitch() {
     
     while (mainThreadExit == false) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        if(mainThreadContextLastTask.valid() && !mainThreadContextLastTask.ready()){
-            mainThreadContextLastTask.wait();
+        if(mainThreadContext.getTask().valid() && !mainThreadContext.getTask().ready()){
+            mainThreadContext.getTask().wait();
         }
     }
     
     // Для окончательного завершения всех задач главного потока
-    if(mainThreadContextLastTask.valid()){
-        mainThreadContextLastTask.get();
+    if(mainThreadContext.getTask().valid()){
+        mainThreadContext.getTask().get();
     }
     
     std::cout << "Main thread exit: " << mainContextValue++ << std::endl;
