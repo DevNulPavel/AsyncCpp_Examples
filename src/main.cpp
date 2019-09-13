@@ -2,9 +2,11 @@
 #include "ParallelAlgoTest.h"
 #include "SchedulersTest.h"
 #include "ContextSwitchTest.h"
+#include "SchedulersContextTest.h"
 
 int main(int argc, char *argv[]) {
     //taskSpawnTest();
-    schedulersTest();
+    //schedulersTest();
     //testContextsSwitch();
+    schedulersContextTest();
 }

@@ -15,6 +15,7 @@ CustomSchedulerBalancer::CustomSchedulerBalancer():
         while (_stopThread == false) {
             std::unique_lock<std::mutex> lock(_mutex);
             _condVar.wait(lock, [this](){
+                // Тут Mutex снова заблокирован
                 bool workExists = (_queue.size() > 0);
                 bool needExit = _stopThread;
                 return workExists || needExit;
@@ -55,6 +56,7 @@ CustomSchedulerBalancer::~CustomSchedulerBalancer(){
     // Дождемся завершения шедулера
     std::unique_lock<std::mutex> lock(_mutex);
     _condVarExit.wait(lock, [this](){
+        // Тут Mutex снова заблокирован
         return (_threadExitSuccess == true);
     });
     std::cout << "Custom scheduler destructor exit" << std::endl;

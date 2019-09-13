@@ -23,7 +23,7 @@ private:
     std::queue<async::task_run_handle> _queue;
     std::atomic_bool _taskIsInWork;
     std::condition_variable _condVarExit;
-    bool _threadExitSuccess;
+    std::atomic_bool _threadExitSuccess;
 };
 
 std::shared_ptr<CustomSchedulerBalancer> selectTheBestScheduler(const std::vector<std::shared_ptr<CustomSchedulerBalancer>>& schedulers);

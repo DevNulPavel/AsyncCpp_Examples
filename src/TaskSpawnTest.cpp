@@ -32,7 +32,7 @@ void taskSpawnTest() {
     });
     
     // Создаем задачу ожидания результата работы 1й и 2->3й задачи
-    auto task4 = async::when_all(task1, task3);
+    auto task4 = async::when_all(task1, task3); // TODO: Thread санитайзер выдает гонку данных
     
     // Создаем продолжение ожидания задач, в качестве параметров - передается набор предыдущих тасков
     auto task5 = task4.then([](std::tuple<async::task<void>, async::task<int>> results) {
