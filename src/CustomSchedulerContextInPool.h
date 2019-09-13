@@ -6,6 +6,7 @@
 #include <vector>
 #include <queue>
 #include <async++.h>
+#include "SpinMutex.h"
 
 class CustomSchedulerThreadPool;
 class CustomSchedulerContextInPool;
@@ -44,7 +45,7 @@ public:
     
 private:
     std::weak_ptr<CustomSchedulerThreadPool> _threadPool;
-    std::mutex _taskQueueMutex;
+    SpinMutex _taskQueueMutex;
     std::queue<async::task_run_handle> _taskQueue;
     std::mutex _executionQueueMutex;
     std::queue<async::task_run_handle> _executionQueue;

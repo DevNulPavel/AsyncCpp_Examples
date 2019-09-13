@@ -138,7 +138,7 @@ CustomSchedulerContextInPool::~CustomSchedulerContextInPool(){
 
 // Для написания кастомного шедулера достаточно, чтобы класс реализовывал метод schedule
 void CustomSchedulerContextInPool::schedule(async::task_run_handle handle) {
-    std::unique_lock<std::mutex> lock(_taskQueueMutex);
+    std::unique_lock<SpinMutex> lock(_taskQueueMutex);
     _taskQueue.push(std::move(handle));
     lock.unlock();
     
@@ -159,7 +159,7 @@ bool CustomSchedulerContextInPool::performOneTask() {
     std::unique_lock<std::mutex> executionLock(_executionQueueMutex, std::adopt_lock);
     
     // Быстренько перекидываем задачи из входящей очереди в очередь исполнения и освобождаем, чтобы можно было добавлять задачи даже во время исполнениия
-    std::unique_lock<std::mutex> queueLock(_taskQueueMutex);
+    std::unique_lock<SpinMutex> queueLock(_taskQueueMutex);
     while (_taskQueue.size() > 0) {
         async::task_run_handle handle = std::move(_taskQueue.front());
         _taskQueue.pop();
