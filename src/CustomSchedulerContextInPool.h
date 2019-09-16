@@ -22,21 +22,22 @@ public:
     void removeContext(const std::weak_ptr<CustomSchedulerContextInPool>& context);
     
 private:
-    std::list<std::shared_ptr<CustomSchedulerContextInPool>> _contexts;
     std::vector<std::thread> _threads;
     std::mutex _mutex;
     std::condition_variable _condVar;
-    std::atomic_bool _workExists;
+    std::list<std::shared_ptr<CustomSchedulerContextInPool>> _contexts;
+    std::list<std::weak_ptr<CustomSchedulerContextInPool>> _contextsExecutionQueue;
     std::atomic_bool _needStop;
     std::condition_variable _exitCondVar;
     std::atomic_size_t _threadsCompleted;
 
 private:
     void wakeUp();
+    void wakeUpForContext(const std::weak_ptr<CustomSchedulerContextInPool>& context);
 };
 
 // Для написания кастомного шедулера достаточно, чтобы класс реализовывал метод schedule
-class CustomSchedulerContextInPool {
+class CustomSchedulerContextInPool: public std::enable_shared_from_this<CustomSchedulerContextInPool> {
     friend class CustomSchedulerThreadPool;
     
 public:

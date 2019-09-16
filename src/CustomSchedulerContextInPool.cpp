@@ -8,7 +8,6 @@
 
 
 CustomSchedulerThreadPool::CustomSchedulerThreadPool(size_t threadsCount):
-    _workExists(false),
     _needStop(false),
     _threadsCompleted(0){
     
@@ -22,7 +21,7 @@ CustomSchedulerThreadPool::CustomSchedulerThreadPool(size_t threadsCount):
             // Ждем поступления новой работы или запроса завершения, на время ожидания Mutex разлочен
             _condVar.wait(lock, [this](){
                 // Тут Mutex снова заблокирован
-                bool workExists = _workExists;
+                bool workExists = (_contextsExecutionQueue.size() > 0);
                 bool needStop = _needStop;
                 return workExists || needStop;
             });
@@ -30,34 +29,43 @@ CustomSchedulerThreadPool::CustomSchedulerThreadPool(size_t threadsCount):
             // Mutex снова залочен
             
             // Проверяем, не выход ли это?
-            if (_workExists == true) {
+            if (_needStop == false) {
                 // Выполняем таски до тех пор, пока у нас во всех контекстах не закончатся задачи
-                bool needIteration = false;
-                do{
-                    needIteration = false;
+                while(_contextsExecutionQueue.size() > 0){
+                    // Первично извлекаем контекст для исполнения
+                    std::weak_ptr<CustomSchedulerContextInPool> context = std::move(_contextsExecutionQueue.front());
+                    _contextsExecutionQueue.pop_front();
                     
-                    // Работать будем с копией списка, так как список может модифицироваться во время работы тасков
-                    std::list<std::shared_ptr<CustomSchedulerContextInPool>> contextsCopy = _contexts;
-                    
-                    // На время работы тасков разблокируем
-                    lock.unlock();
-                    
-                    // Обходим все контексты и пробуем запустить таски, если в контекстах была какая-то работа - значит сделаем потом еще одну итерацию
-                    // чтобы проверить, что точно все задачи были завершены
-                    for (std::shared_ptr<CustomSchedulerContextInPool>& context: contextsCopy) {
-                        bool isExecuted = context->performOneTask();
-                        needIteration |= isExecuted;
+                    // Проверяем, что он не истек
+                    if (context.expired() == false) {
+                        // Получаем фактический контекст
+                        std::shared_ptr<CustomSchedulerContextInPool> contextShared = context.lock();
+                        
+                        // На время работы тасков - разблокируем
+                        lock.unlock();
+                        
+                        // Была ли выполнена какая-то задача, либо задачи закончились, или мы уже на исполнении этой очереди
+                        bool executed = contextShared->performOneTask();
+                        
+                        // Для новой итерации снова ставим блокировку
+                        lock.lock();
+                        
+                        // Если задача была выполнена, то ставим в очередь еще одну проверку очереди,
+                        // Если задача была на исполнении уже в другом потоке, то он и отвечает за повторную проверку - это нужно,
+                        // чтобы не терялись задачи в случае, если несколько потоков начинают обрабатывать одну очередь
+                        // Немного избыточный подход, зато надежный
+                        if (executed) {
+                            _contextsExecutionQueue.push_back(context);
+                        }else{
+                            //LOG(std::cout << "Task context in execution in other thread or context empty" << std::endl);
+                        }
                     }
-                    
-                    // Для новой итерации снова ставим блокировку
-                    lock.lock();
-                }while (needIteration);
+                }
             }
             
             // Mutex снова залочен
             
-            // Сбрасываем флаг наличия новой работы всегда в конце
-            _workExists = false;
+            //LOG(std::cout << "Start thread waiting" << std::endl);
         }
         
         LOG(std::cout << "Custom scheduler context thread exit" << std::endl);
@@ -119,8 +127,12 @@ void CustomSchedulerThreadPool::removeContext(const std::weak_ptr<CustomSchedule
 }
 
 void CustomSchedulerThreadPool::wakeUp(){
+    _condVar.notify_one();
+}
+
+void CustomSchedulerThreadPool::wakeUpForContext(const std::weak_ptr<CustomSchedulerContextInPool>& context){
     std::unique_lock<std::mutex> lock(_mutex);
-    _workExists = true;
+    _contextsExecutionQueue.push_back(context);
     lock.unlock();
     
     _condVar.notify_one();
@@ -143,7 +155,7 @@ void CustomSchedulerContextInPool::schedule(async::task_run_handle handle) {
     lock.unlock();
     
     if (_threadPool.expired() == false) {
-        _threadPool.lock()->wakeUp();
+        _threadPool.lock()->wakeUpForContext(shared_from_this());
     }
 }
 
