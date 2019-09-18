@@ -12,16 +12,20 @@ set(LIBS_FOLDER
 )
 set(LIBS_FOLDERS
     "asyncplusplus"
+    "cpp-channel"
 )
 set(LIBS_LINK_NAMES
     "Async++"
+    "cpp-channel"
 )
 set(LIBS_DEPENCY_NAMES
     "Async++"
+    "cpp-channel"
 )
 set(LIBS_INCLUDE_FOLDERS
     "asyncplusplus/include"
     "concurrentqueue"
+    "cpp-channel/include"
 )
 
 
