@@ -8,5 +8,7 @@ int main(int argc, char *argv[]) {
     //taskSpawnTest();
     //schedulersTest();
     //testContextsSwitch();
-    schedulersContextTest();
+    //schedulersContextTest();
+    schedulersContextPerformanceTest();
+    return 0;
 }

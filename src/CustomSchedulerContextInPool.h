@@ -8,6 +8,11 @@
 #include <async++.h>
 #include "SpinMutex.h"
 
+/*
+- Создавать/уничтожать пул потоков + создавать/уничтожать контексты нужно в одном и том же потоке
+*/
+
+
 class CustomSchedulerThreadPool;
 class CustomSchedulerContextInPool;
 
@@ -18,6 +23,7 @@ class CustomSchedulerThreadPool: public std::enable_shared_from_this<CustomSched
 public:
     CustomSchedulerThreadPool(size_t threadsCount);
     ~CustomSchedulerThreadPool();
+    void stopAll();
     std::weak_ptr<CustomSchedulerContextInPool> makeNewContext();
     void removeContext(const std::weak_ptr<CustomSchedulerContextInPool>& context);
     
@@ -26,10 +32,11 @@ private:
     std::mutex _mutex;
     std::condition_variable _condVar;
     std::list<std::shared_ptr<CustomSchedulerContextInPool>> _contexts;
-    std::list<std::weak_ptr<CustomSchedulerContextInPool>> _contextsExecutionQueue;
+    std::queue<std::weak_ptr<CustomSchedulerContextInPool>> _contextsExecutionQueue;
     std::atomic_bool _needStop;
+    std::mutex _exitMutex;
     std::condition_variable _exitCondVar;
-    std::atomic_size_t _threadsCompleted;
+    size_t _threadsCompleted;
 
 private:
     void wakeUp();
@@ -43,13 +50,12 @@ class CustomSchedulerContextInPool: public std::enable_shared_from_this<CustomSc
 public:
     void schedule(async::task_run_handle t);
     virtual ~CustomSchedulerContextInPool();
+    void clearAllTasks();
     
 private:
     std::weak_ptr<CustomSchedulerThreadPool> _threadPool;
-    SpinMutex _taskQueueMutex;
+    std::mutex _taskQueueMutex; // Можно использовать SpinMutex
     std::queue<async::task_run_handle> _taskQueue;
-    std::mutex _executionQueueMutex;
-    std::queue<async::task_run_handle> _executionQueue;
     std::atomic_bool _executionInProgress;
     
 private:
